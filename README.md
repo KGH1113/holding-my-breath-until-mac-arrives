@@ -52,13 +52,15 @@ The countdown card includes a server-fetched shipment summary for:
 - Apple order status
 - DHL tracking
 
-Tracking data is normalized in `src/lib/tracking.ts` and cached for 5 minutes in `.cache/tracking-cache.json`.
+Tracking data is normalized in `src/lib/tracking.ts` and cached for 5 minutes.
 
 Behavior:
 
 - if a provider fetch succeeds, the latest snapshot is cached
 - if a later fetch fails, the page reuses the last successful provider snapshot and marks it as stale
 - if no cached value exists, that provider falls back to an unavailable state
+- local development prefers a file-backed cache
+- serverless runtimes fall back to best-effort in-memory cache if the filesystem is not writable
 
 Current limitations:
 
@@ -181,7 +183,8 @@ Notes:
 - `APPLE_ORDER_COOKIE` is intentionally not committed and must be supplied manually.
 - `DHL_API_KEY` must be issued from the DHL Developer Portal for the `Shipment Tracking - Unified` API.
 - `DHL_UTAPI_COOKIE` is only a best-effort fallback for DHL's protected public web endpoint and may expire quickly or stop working without warning.
-- The cache file is local to the running server process and filesystem. On ephemeral hosting, stale retention may reset between deploys or instance restarts.
+- Local development uses a file-backed cache when possible.
+- Vercel/serverless deployments may use process-memory cache only, which can reset across cold starts or invocations.
 
 ## Verification
 

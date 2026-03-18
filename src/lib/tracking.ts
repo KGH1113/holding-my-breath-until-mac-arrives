@@ -1,6 +1,7 @@
 import "server-only";
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 
 const APPLE_ORDER_URL =
@@ -16,7 +17,10 @@ const DHL_API_KEY = process.env.DHL_API_KEY;
 const DHL_UTAPI_COOKIE = process.env.DHL_UTAPI_COOKIE;
 
 const CACHE_TTL_MS = 5 * 60 * 1_000;
-const CACHE_DIR = path.join(process.cwd(), ".cache");
+const CACHE_DIR =
+  process.env.NODE_ENV === "production"
+    ? path.join(os.tmpdir(), "holding-my-breath-until-mac-arrives-cache")
+    : path.join(process.cwd(), ".cache");
 const CACHE_FILE = path.join(CACHE_DIR, "tracking-cache.json");
 
 export type TrackingProviderSnapshot = {
@@ -35,6 +39,9 @@ export type TrackingSnapshot = {
 };
 
 type CachedTrackingSnapshot = TrackingSnapshot;
+
+let memoryCache: CachedTrackingSnapshot | null = null;
+let cacheMode: "unknown" | "file" | "memory" = "unknown";
 
 function logTracking(message: string, details?: Record<string, unknown>) {
   const prefix = "[tracking]";
@@ -104,17 +111,50 @@ function extractJsonScript<T>(html: string, scriptId: string) {
 }
 
 async function readCache() {
+  if (cacheMode === "memory") {
+    logTracking("Using memory tracking cache");
+    return memoryCache;
+  }
+
   try {
     const raw = await readFile(CACHE_FILE, "utf8");
+    cacheMode = "file";
+    logTracking("Using file tracking cache", {
+      cacheFile: CACHE_FILE,
+    });
     return JSON.parse(raw) as CachedTrackingSnapshot;
   } catch {
-    return null;
+    cacheMode = "memory";
+    logTracking("File tracking cache unavailable, falling back to memory", {
+      cacheFile: CACHE_FILE,
+    });
+
+    return memoryCache;
   }
 }
 
 async function writeCache(snapshot: TrackingSnapshot) {
-  await mkdir(CACHE_DIR, { recursive: true });
-  await writeFile(CACHE_FILE, JSON.stringify(snapshot, null, 2), "utf8");
+  memoryCache = snapshot;
+
+  if (cacheMode === "memory") {
+    logTracking("Stored tracking snapshot in memory cache");
+    return;
+  }
+
+  try {
+    await mkdir(CACHE_DIR, { recursive: true });
+    await writeFile(CACHE_FILE, JSON.stringify(snapshot, null, 2), "utf8");
+    cacheMode = "file";
+    logTracking("Stored tracking snapshot in file cache", {
+      cacheFile: CACHE_FILE,
+    });
+  } catch (error) {
+    cacheMode = "memory";
+    logTracking("File tracking cache write failed, using memory cache", {
+      cacheFile: CACHE_FILE,
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
 }
 
 function markStale(
