@@ -76,11 +76,16 @@ src/
     page.tsx          Server entry that detects locale from headers
     globals.css       Tailwind import only
   components/
-    home-page.tsx     Main landing page UI and localized content
+    home-page.tsx     Compatibility export for the home feature
+  features/
+    home/
+      home-page.tsx   Main landing page UI and localized content
+    tracking/
+      service.ts      Apple + DHL tracking fetch, normalization, and cache
   lib/
     countdown.ts      Countdown math and delivery state calculation
     i18n.ts           Locale detection helpers
-    tracking.ts       Apple + DHL tracking fetch, normalization, and cache
+    tracking.ts       Tracking service re-export for app-level imports
 ```
 
 ## Development
