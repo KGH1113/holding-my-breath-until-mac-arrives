@@ -10,7 +10,6 @@ const DHL_TRACKING_PAGE_URL =
   process.env.DHL_TRACKING_PAGE_URL ??
   `https://www.dhl.com/kr-ko/home/tracking.html?submit=1&tracking-id=${DHL_TRACKING_NUMBER}`;
 const DHL_API_KEY = process.env.DHL_API_KEY;
-const DHL_UTAPI_COOKIE = process.env.DHL_UTAPI_COOKIE;
 
 const CACHE_TTL_MS = 5 * 60 * 1_000;
 const CACHE_TTL_SECONDS = Math.floor(CACHE_TTL_MS / 1_000);
@@ -219,30 +218,7 @@ function markStale(
 }
 
 function isReliableDhlSnapshot(snapshot: TrackingProviderSnapshot) {
-  const genericLatestEvents = new Set([
-    "No DHL event details could be extracted.",
-    "추적 상황은 통상적으로 배송 조회 ID를 받은 24~48시간 후에 표시됩니다",
-    "Delivered",
-  ]);
-
-  const unreliableStatuses = new Set(["Unavailable", "Delivered"]);
-
-  if (genericLatestEvents.has(snapshot.latestEvent)) {
-    return false;
-  }
-
-  if (unreliableStatuses.has(snapshot.status)) {
-    return false;
-  }
-
-  if (
-    looksLikeDhlFooterNoise(snapshot.status) ||
-    looksLikeDhlFooterNoise(snapshot.latestEvent)
-  ) {
-    return false;
-  }
-
-  return true;
+  return snapshot.status !== "Unavailable";
 }
 
 function isReliableAppleSnapshot(snapshot: TrackingProviderSnapshot) {
@@ -324,183 +300,6 @@ function getDhlSnapshotFromShipment(
     eventTime,
     isStale: false,
   };
-}
-
-function looksLikeDhlFooterNoise(value: string | null) {
-  if (!value) {
-    return false;
-  }
-
-  return [
-    "채용",
-    "언론 소식",
-    "투자자",
-    "지속 가능성",
-    "브랜드 파트너십",
-    "사기 주의",
-    "법적 고지",
-    "이용약관",
-    "개인정보 처리방침",
-    "쿠키 설정",
-    "DHL 팔로우하기",
-    "all rights reserved",
-  ].some((keyword) => value.includes(keyword));
-}
-
-async function fetchDhlTrackingViaPublicPage() {
-  try {
-    logTracking("DHL public page fallback started", {
-      url: DHL_TRACKING_PAGE_URL,
-    });
-
-    const pageResponse = await fetch(DHL_TRACKING_PAGE_URL, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36",
-        Accept:
-          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-        "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
-      },
-      cache: "no-store",
-    });
-
-    if (!pageResponse.ok) {
-      logTracking("DHL public page fallback failed", {
-        status: pageResponse.status,
-      });
-      return {
-        ok: false as const,
-        snapshot: defaultProviderState(
-          DHL_TRACKING_PAGE_URL,
-          `DHL public tracking page request failed with ${pageResponse.status}.`,
-        ),
-      };
-    }
-
-    const html = await pageResponse.text();
-    const text = stripHtml(html);
-    const pageStatusCandidates = [
-      findFirstMatch(text, [
-        /발송인에 의해 발송 정보는 등록되었으나 발송물은 아직 DHL에 인계되지 않았습니다/i,
-        /Shipment information received/i,
-      ]),
-      findFirstMatch(text, [
-        /배송 중[^.]{0,120}/i,
-        /Out for delivery[^.]{0,120}/i,
-      ]),
-      findFirstMatch(text, [/배송 완료[^.]{0,120}/i]),
-    ];
-    const pageStatus =
-      pageStatusCandidates.find(
-        (candidate) => candidate && !looksLikeDhlFooterNoise(candidate),
-      ) ?? null;
-
-    if (pageStatus && !looksLikeDhlFooterNoise(pageStatus)) {
-      logTracking("DHL public page fallback succeeded from HTML", {
-        status: pageStatus,
-      });
-      return {
-        ok: true as const,
-        snapshot: {
-          sourceUrl: DHL_TRACKING_PAGE_URL,
-          status: pageStatus,
-          latestEvent: pageStatus,
-          eventTime: null,
-          isStale: false,
-        },
-      };
-    }
-
-    const webApiUrl = new URL("https://www.dhl.com/utapi");
-    webApiUrl.searchParams.set("trackingNumber", DHL_TRACKING_NUMBER);
-    webApiUrl.searchParams.set(
-      "language",
-      process.env.DHL_TRACKING_LANGUAGE ?? "ko",
-    );
-    webApiUrl.searchParams.set("requesterCountryCode", "KR");
-    webApiUrl.searchParams.set("source", "tt");
-    webApiUrl.searchParams.set("offset", "0");
-    webApiUrl.searchParams.set("limit", "1");
-
-    logTracking("DHL public web endpoint fallback started", {
-      url: webApiUrl.toString(),
-    });
-
-    const webApiResponse = await fetch(webApiUrl, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36",
-        Accept: "application/json, text/plain, */*",
-        "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
-        Referer: DHL_TRACKING_PAGE_URL,
-        ...(DHL_UTAPI_COOKIE ? { Cookie: DHL_UTAPI_COOKIE } : {}),
-      },
-      cache: "no-store",
-    });
-
-    const rawBody = await webApiResponse.text();
-
-    if (!webApiResponse.ok) {
-      const challengePayload = rawBody.includes('"sec-cp-challenge"');
-
-      logTracking("DHL public web endpoint fallback failed", {
-        status: webApiResponse.status,
-        challenge: challengePayload,
-      });
-
-      return {
-        ok: false as const,
-        snapshot: defaultProviderState(
-          DHL_TRACKING_PAGE_URL,
-          challengePayload
-            ? "DHL public tracking endpoint requested an anti-bot challenge."
-            : `DHL public tracking endpoint failed with ${webApiResponse.status}.`,
-        ),
-      };
-    }
-
-    const payload = JSON.parse(rawBody) as {
-      shipments?: DhlShipmentPayload[];
-    };
-    const snapshot = getDhlSnapshotFromShipment(payload.shipments?.[0]);
-
-    if (!snapshot) {
-      logTracking("DHL public web endpoint fallback incomplete", {
-        hasShipment: Boolean(payload.shipments?.[0]),
-      });
-      return {
-        ok: false as const,
-        snapshot: defaultProviderState(
-          DHL_TRACKING_PAGE_URL,
-          "DHL public tracking endpoint did not return a shipment status.",
-        ),
-      };
-    }
-
-    logTracking("DHL public web endpoint fallback succeeded", {
-      status: snapshot.status,
-      latestEvent: snapshot.latestEvent,
-      eventTime: snapshot.eventTime,
-    });
-
-    return {
-      ok: true as const,
-      snapshot,
-    };
-  } catch (error) {
-    logTracking("DHL public fallback threw", {
-      error: error instanceof Error ? error.message : "Unknown error",
-    });
-    return {
-      ok: false as const,
-      snapshot: defaultProviderState(
-        DHL_TRACKING_PAGE_URL,
-        error instanceof Error
-          ? error.message
-          : "Unknown DHL public fallback error.",
-      ),
-    };
-  }
 }
 
 async function fetchAppleTracking() {
@@ -646,7 +445,13 @@ async function fetchDhlTracking() {
     logTracking("DHL tracking skipped", {
       reason: "Missing DHL_API_KEY",
     });
-    return fetchDhlTrackingViaPublicPage();
+    return {
+      ok: false as const,
+      snapshot: defaultProviderState(
+        DHL_TRACKING_PAGE_URL,
+        "Missing DHL_API_KEY environment variable.",
+      ),
+    };
   }
 
   try {
@@ -671,7 +476,13 @@ async function fetchDhlTracking() {
       logTracking("DHL tracking request failed", {
         status: response.status,
       });
-      return fetchDhlTrackingViaPublicPage();
+      return {
+        ok: false as const,
+        snapshot: defaultProviderState(
+          DHL_TRACKING_PAGE_URL,
+          `DHL API request failed with ${response.status}.`,
+        ),
+      };
     }
 
     const payload = (await response.json()) as {
@@ -683,7 +494,13 @@ async function fetchDhlTracking() {
       logTracking("DHL tracking response incomplete", {
         hasShipment: Boolean(payload.shipments?.[0]),
       });
-      return fetchDhlTrackingViaPublicPage();
+      return {
+        ok: false as const,
+        snapshot: defaultProviderState(
+          DHL_TRACKING_PAGE_URL,
+          "DHL API response did not include a usable shipment status.",
+        ),
+      };
     }
 
     logTracking("DHL tracking request succeeded", {
@@ -700,7 +517,13 @@ async function fetchDhlTracking() {
     logTracking("DHL tracking request threw", {
       error: error instanceof Error ? error.message : "Unknown error",
     });
-    return fetchDhlTrackingViaPublicPage();
+    return {
+      ok: false as const,
+      snapshot: defaultProviderState(
+        DHL_TRACKING_PAGE_URL,
+        error instanceof Error ? error.message : "Unknown DHL API error.",
+      ),
+    };
   }
 }
 

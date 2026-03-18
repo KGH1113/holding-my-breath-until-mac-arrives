@@ -65,7 +65,7 @@ Behavior:
 Current limitations:
 
 - Apple requires an authenticated guest-order cookie. Anonymous server requests currently return `403 Forbidden`.
-- DHL now uses the official Shipment Tracking API and requires a valid `DHL_API_KEY`.
+- DHL is API-only and requires a valid `DHL_API_KEY`. No DHL web scraping fallback is used.
 
 ## Project structure
 
@@ -164,11 +164,9 @@ The tracking layer reads these environment variables:
 - `DHL_TRACKING_PAGE_URL`
   Optional public DHL tracking page used as the source link in the UI
 - `DHL_API_KEY`
-  Required for DHL tracking via the official Shipment Tracking API
+  Required for DHL tracking via the official Shipment Tracking API (mandatory for DHL data)
 - `DHL_TRACKING_LANGUAGE`
   Optional API response language, defaults to `ko`
-- `DHL_UTAPI_COOKIE`
-  Optional browser cookie string for the public DHL web fallback endpoint when the official API is unavailable
 - `KV_REST_API_URL` / `KV_REST_API_TOKEN`
   Preferred cache backend (Vercel KV REST)
 - `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`
@@ -186,7 +184,6 @@ DHL_TRACKING_PAGE_URL='https://www.dhl.com/kr-ko/home/tracking.html?submit=1&tra
 DHL_TRACKING_NUMBER='7197708221'
 DHL_API_KEY='your-dhl-subscription-key'
 DHL_TRACKING_LANGUAGE='ko'
-DHL_UTAPI_COOKIE='ak_bmsc=...; _abck=...; bm_sz=...'
 KV_REST_API_URL='https://...upstash.io'
 KV_REST_API_TOKEN='...'
 TRACKING_CACHE_KEY='tracking:snapshot:v1'
@@ -196,7 +193,6 @@ Notes:
 
 - `APPLE_ORDER_COOKIE` is intentionally not committed and must be supplied manually.
 - `DHL_API_KEY` must be issued from the DHL Developer Portal for the `Shipment Tracking - Unified` API.
-- `DHL_UTAPI_COOKIE` is only a best-effort fallback for DHL's protected public web endpoint and may expire quickly or stop working without warning.
 - Redis/KV is the primary cache backend when configured.
 - In-memory cache is process-local and can reset across cold starts or instance changes.
 
