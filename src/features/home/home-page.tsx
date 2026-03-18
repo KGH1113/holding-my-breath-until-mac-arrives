@@ -13,7 +13,7 @@ import type { TrackingSnapshot } from "@/lib/tracking";
 const SECOND = 1_000;
 
 const deliveryTarget: DeliveryTarget = {
-  date: "2026-03-25",
+  date: "2026-03-24",
   timeZone: "Asia/Seoul",
   utcOffset: "+09:00",
 };

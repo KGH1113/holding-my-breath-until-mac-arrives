@@ -59,8 +59,8 @@ Behavior:
 - if a provider fetch succeeds, the latest snapshot is cached
 - if a later fetch fails, the page reuses the last successful provider snapshot and marks it as stale
 - if no cached value exists, that provider falls back to an unavailable state
-- local development prefers a file-backed cache
-- serverless runtimes fall back to best-effort in-memory cache if the filesystem is not writable
+- Redis/KV cache is used when configured (`KV_REST_API_URL` + `KV_REST_API_TOKEN` or Upstash equivalents)
+- if Redis/KV is not available, the app falls back to best-effort in-memory cache
 
 Current limitations:
 
@@ -169,6 +169,12 @@ The tracking layer reads these environment variables:
   Optional API response language, defaults to `ko`
 - `DHL_UTAPI_COOKIE`
   Optional browser cookie string for the public DHL web fallback endpoint when the official API is unavailable
+- `KV_REST_API_URL` / `KV_REST_API_TOKEN`
+  Preferred cache backend (Vercel KV REST)
+- `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`
+  Alternative Redis REST envs (supported as fallback names)
+- `TRACKING_CACHE_KEY`
+  Optional key name for the cached tracking snapshot (default: `tracking:snapshot:v1`)
 
 Example:
 
@@ -181,6 +187,9 @@ DHL_TRACKING_NUMBER='7197708221'
 DHL_API_KEY='your-dhl-subscription-key'
 DHL_TRACKING_LANGUAGE='ko'
 DHL_UTAPI_COOKIE='ak_bmsc=...; _abck=...; bm_sz=...'
+KV_REST_API_URL='https://...upstash.io'
+KV_REST_API_TOKEN='...'
+TRACKING_CACHE_KEY='tracking:snapshot:v1'
 ```
 
 Notes:
@@ -188,8 +197,8 @@ Notes:
 - `APPLE_ORDER_COOKIE` is intentionally not committed and must be supplied manually.
 - `DHL_API_KEY` must be issued from the DHL Developer Portal for the `Shipment Tracking - Unified` API.
 - `DHL_UTAPI_COOKIE` is only a best-effort fallback for DHL's protected public web endpoint and may expire quickly or stop working without warning.
-- Local development uses a file-backed cache when possible.
-- Vercel/serverless deployments may use process-memory cache only, which can reset across cold starts or invocations.
+- Redis/KV is the primary cache backend when configured.
+- In-memory cache is process-local and can reset across cold starts or instance changes.
 
 ## Verification
 

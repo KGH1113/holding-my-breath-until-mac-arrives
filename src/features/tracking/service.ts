@@ -1,9 +1,5 @@
 import "server-only";
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-
 const APPLE_ORDER_URL =
   process.env.APPLE_ORDER_URL ??
   "https://secure9.store.apple.com/kr/shop/order/guest/W1345336219/99528aaff860e20d36fce17666d7c9691d83c91f4371686e68252ffbaf6942d59f0ac81b1677933755b956a806031a357493f407819a782e3af6e2e07c51fadc7778dc52c15c153663b2e01e2d153f71?e=true";
@@ -17,11 +13,13 @@ const DHL_API_KEY = process.env.DHL_API_KEY;
 const DHL_UTAPI_COOKIE = process.env.DHL_UTAPI_COOKIE;
 
 const CACHE_TTL_MS = 5 * 60 * 1_000;
-const CACHE_DIR =
-  process.env.NODE_ENV === "production"
-    ? path.join(os.tmpdir(), "holding-my-breath-until-mac-arrives-cache")
-    : path.join(process.cwd(), ".cache");
-const CACHE_FILE = path.join(CACHE_DIR, "tracking-cache.json");
+const CACHE_TTL_SECONDS = Math.floor(CACHE_TTL_MS / 1_000);
+const TRACKING_CACHE_KEY =
+  process.env.TRACKING_CACHE_KEY ?? "tracking:snapshot:v1";
+const REDIS_REST_URL =
+  process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL ?? null;
+const REDIS_REST_TOKEN =
+  process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN ?? null;
 
 export type TrackingProviderSnapshot = {
   sourceUrl: string;
@@ -41,7 +39,7 @@ export type TrackingSnapshot = {
 type CachedTrackingSnapshot = TrackingSnapshot;
 
 let memoryCache: CachedTrackingSnapshot | null = null;
-let cacheMode: "unknown" | "file" | "memory" = "unknown";
+let cacheMode: "unknown" | "redis" | "memory" = "unknown";
 
 function logTracking(message: string, details?: Record<string, unknown>) {
   const prefix = "[tracking]";
@@ -116,17 +114,48 @@ async function readCache() {
     return memoryCache;
   }
 
-  try {
-    const raw = await readFile(CACHE_FILE, "utf8");
-    cacheMode = "file";
-    logTracking("Using file tracking cache", {
-      cacheFile: CACHE_FILE,
-    });
-    return JSON.parse(raw) as CachedTrackingSnapshot;
-  } catch {
+  if (!REDIS_REST_URL || !REDIS_REST_TOKEN) {
     cacheMode = "memory";
-    logTracking("File tracking cache unavailable, falling back to memory", {
-      cacheFile: CACHE_FILE,
+    logTracking("Redis cache not configured, falling back to memory", {
+      redisConfigured: false,
+    });
+    return memoryCache;
+  }
+
+  try {
+    const response = await fetch(
+      `${REDIS_REST_URL}/get/${encodeURIComponent(TRACKING_CACHE_KEY)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${REDIS_REST_TOKEN}`,
+          Accept: "application/json",
+        },
+        cache: "no-store",
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Redis GET failed with ${response.status}`);
+    }
+
+    const payload = (await response.json()) as { result?: string | null };
+    const raw = payload.result;
+
+    cacheMode = "redis";
+    logTracking("Using redis tracking cache", {
+      cacheKey: TRACKING_CACHE_KEY,
+    });
+
+    if (!raw) {
+      return memoryCache;
+    }
+
+    return JSON.parse(raw) as CachedTrackingSnapshot;
+  } catch (error) {
+    cacheMode = "memory";
+    logTracking("Redis tracking cache unavailable, falling back to memory", {
+      cacheKey: TRACKING_CACHE_KEY,
+      error: error instanceof Error ? error.message : "Unknown error",
     });
 
     return memoryCache;
@@ -141,17 +170,40 @@ async function writeCache(snapshot: TrackingSnapshot) {
     return;
   }
 
+  if (!REDIS_REST_URL || !REDIS_REST_TOKEN) {
+    cacheMode = "memory";
+    logTracking("Redis cache not configured, stored snapshot in memory", {
+      redisConfigured: false,
+    });
+    return;
+  }
+
   try {
-    await mkdir(CACHE_DIR, { recursive: true });
-    await writeFile(CACHE_FILE, JSON.stringify(snapshot, null, 2), "utf8");
-    cacheMode = "file";
-    logTracking("Stored tracking snapshot in file cache", {
-      cacheFile: CACHE_FILE,
+    const value = JSON.stringify(snapshot);
+    const response = await fetch(
+      `${REDIS_REST_URL}/set/${encodeURIComponent(TRACKING_CACHE_KEY)}/${encodeURIComponent(value)}?EX=${CACHE_TTL_SECONDS}`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${REDIS_REST_TOKEN}`,
+          Accept: "application/json",
+        },
+        cache: "no-store",
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Redis SET failed with ${response.status}`);
+    }
+
+    cacheMode = "redis";
+    logTracking("Stored tracking snapshot in redis cache", {
+      cacheKey: TRACKING_CACHE_KEY,
     });
   } catch (error) {
     cacheMode = "memory";
-    logTracking("File tracking cache write failed, using memory cache", {
-      cacheFile: CACHE_FILE,
+    logTracking("Redis cache write failed, using memory cache", {
+      cacheKey: TRACKING_CACHE_KEY,
       error: error instanceof Error ? error.message : "Unknown error",
     });
   }
