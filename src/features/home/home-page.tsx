@@ -370,6 +370,42 @@ function formatUpdatedAt(timestamp: string | null, locale: Locale) {
   }).format(new Date(timestamp));
 }
 
+function getLocalizedDhlStatus(status: string, locale: Locale) {
+  const normalized = status.trim().toLowerCase();
+
+  const matches = (keywords: string[]) =>
+    keywords.some((keyword) => normalized.includes(keyword));
+
+  const isInTransit = matches(["in transit", "운송", "이동 중", "다음 연결"]);
+  const isDelivered = matches(["delivered", "배송 완료", "배달 완료"]);
+  const isInfoReceived = matches([
+    "shipment information received",
+    "발송 정보는 등록",
+    "아직 dhl에 인계되지",
+  ]);
+  const isCustoms = matches(["customs", "통관"]);
+  const isPickedUp = matches(["picked up", "접수", "픽업"]);
+  const isException = matches(["exception", "지연", "보류", "문제"]);
+
+  if (locale === "ko") {
+    if (isDelivered) return "배송 완료";
+    if (isCustoms) return "통관 진행 중";
+    if (isInfoReceived) return "배송 정보 접수됨";
+    if (isPickedUp) return "픽업 완료";
+    if (isException) return "예외 발생";
+    if (isInTransit) return "운송 중";
+    return status;
+  }
+
+  if (isDelivered) return "Delivered";
+  if (isCustoms) return "In customs processing";
+  if (isInfoReceived) return "Shipment information received";
+  if (isPickedUp) return "Picked up";
+  if (isException) return "Exception";
+  if (isInTransit) return "In transit";
+  return status;
+}
+
 export function HomePage({ locale, tracking }: HomePageProps) {
   const [nowTimestamp, setNowTimestamp] = useState<number | null>(null);
   const [activeLocale, setActiveLocale] = useState<Locale>(locale);
@@ -709,7 +745,12 @@ export function HomePage({ locale, tracking }: HomePageProps) {
                         {copy.shipmentStatusLabel}
                       </span>
                       <span>
-                        {data.status || copy.shipmentUnavailableLabel}
+                        {label === "DHL"
+                          ? getLocalizedDhlStatus(
+                              data.status || copy.shipmentUnavailableLabel,
+                              activeLocale,
+                            )
+                          : data.status || copy.shipmentUnavailableLabel}
                       </span>
                     </p>
                     <p className="m-0">

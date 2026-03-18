@@ -1,4 +1,5 @@
 import "server-only";
+import type { Locale } from "@/lib/i18n";
 
 const APPLE_ORDER_URL =
   process.env.APPLE_ORDER_URL ??
@@ -37,7 +38,7 @@ export type TrackingSnapshot = {
 
 type CachedTrackingSnapshot = TrackingSnapshot;
 
-let memoryCache: CachedTrackingSnapshot | null = null;
+const memoryCache = new Map<string, CachedTrackingSnapshot>();
 let cacheMode: "unknown" | "redis" | "memory" = "unknown";
 
 function logTracking(message: string, details?: Record<string, unknown>) {
@@ -107,10 +108,18 @@ function extractJsonScript<T>(html: string, scriptId: string) {
   }
 }
 
-async function readCache() {
+function resolveDhlLanguage(locale: Locale) {
+  return locale === "ko" ? "ko" : "en";
+}
+
+function resolveCacheKey(locale: Locale) {
+  return `${TRACKING_CACHE_KEY}:${locale}`;
+}
+
+async function readCache(cacheKey: string) {
   if (cacheMode === "memory") {
     logTracking("Using memory tracking cache");
-    return memoryCache;
+    return memoryCache.get(cacheKey) ?? null;
   }
 
   if (!REDIS_REST_URL || !REDIS_REST_TOKEN) {
@@ -118,12 +127,12 @@ async function readCache() {
     logTracking("Redis cache not configured, falling back to memory", {
       redisConfigured: false,
     });
-    return memoryCache;
+    return memoryCache.get(cacheKey) ?? null;
   }
 
   try {
     const response = await fetch(
-      `${REDIS_REST_URL}/get/${encodeURIComponent(TRACKING_CACHE_KEY)}`,
+      `${REDIS_REST_URL}/get/${encodeURIComponent(cacheKey)}`,
       {
         headers: {
           Authorization: `Bearer ${REDIS_REST_TOKEN}`,
@@ -142,27 +151,27 @@ async function readCache() {
 
     cacheMode = "redis";
     logTracking("Using redis tracking cache", {
-      cacheKey: TRACKING_CACHE_KEY,
+      cacheKey,
     });
 
     if (!raw) {
-      return memoryCache;
+      return memoryCache.get(cacheKey) ?? null;
     }
 
     return JSON.parse(raw) as CachedTrackingSnapshot;
   } catch (error) {
     cacheMode = "memory";
     logTracking("Redis tracking cache unavailable, falling back to memory", {
-      cacheKey: TRACKING_CACHE_KEY,
+      cacheKey,
       error: error instanceof Error ? error.message : "Unknown error",
     });
 
-    return memoryCache;
+    return memoryCache.get(cacheKey) ?? null;
   }
 }
 
-async function writeCache(snapshot: TrackingSnapshot) {
-  memoryCache = snapshot;
+async function writeCache(cacheKey: string, snapshot: TrackingSnapshot) {
+  memoryCache.set(cacheKey, snapshot);
 
   if (cacheMode === "memory") {
     logTracking("Stored tracking snapshot in memory cache");
@@ -180,7 +189,7 @@ async function writeCache(snapshot: TrackingSnapshot) {
   try {
     const value = JSON.stringify(snapshot);
     const response = await fetch(
-      `${REDIS_REST_URL}/set/${encodeURIComponent(TRACKING_CACHE_KEY)}/${encodeURIComponent(value)}?EX=${CACHE_TTL_SECONDS}`,
+      `${REDIS_REST_URL}/set/${encodeURIComponent(cacheKey)}/${encodeURIComponent(value)}?EX=${CACHE_TTL_SECONDS}`,
       {
         method: "POST",
         headers: {
@@ -197,12 +206,12 @@ async function writeCache(snapshot: TrackingSnapshot) {
 
     cacheMode = "redis";
     logTracking("Stored tracking snapshot in redis cache", {
-      cacheKey: TRACKING_CACHE_KEY,
+      cacheKey,
     });
   } catch (error) {
     cacheMode = "memory";
     logTracking("Redis cache write failed, using memory cache", {
-      cacheKey: TRACKING_CACHE_KEY,
+      cacheKey,
       error: error instanceof Error ? error.message : "Unknown error",
     });
   }
@@ -260,6 +269,37 @@ type DhlShipmentPayload = {
   estimatedTimeOfDelivery?: string;
 };
 
+function getDhlStatusLabel(shipment: DhlShipmentPayload) {
+  const code = shipment.status?.statusCode?.toLowerCase() ?? "";
+  const subStatus = shipment.status?.status?.toUpperCase() ?? "";
+
+  if (code === "delivered") {
+    return "Delivered";
+  }
+
+  if (code === "transit") {
+    return "In transit";
+  }
+
+  if (code === "pre-transit") {
+    return "Shipment information received";
+  }
+
+  if (code === "failure") {
+    return "Exception";
+  }
+
+  if (subStatus === "PU") {
+    return "Picked up";
+  }
+
+  if (subStatus === "PL") {
+    return "In transit";
+  }
+
+  return null;
+}
+
 function getDhlSnapshotFromShipment(
   shipment: DhlShipmentPayload | undefined,
 ): TrackingProviderSnapshot | null {
@@ -269,8 +309,7 @@ function getDhlSnapshotFromShipment(
 
   const latestEventEntry = shipment.events?.[0];
   const status =
-    shipment.status?.description ??
-    latestEventEntry?.description ??
+    getDhlStatusLabel(shipment) ??
     shipment.status?.remark ??
     shipment.status?.status ??
     shipment.status?.statusCode ??
@@ -384,28 +423,39 @@ async function fetchAppleTracking() {
     const deliveryDate =
       firstItem?.orderItemDetails?.d?.deliveryDate?.trim() ?? null;
 
-    const status =
-      statusDescription ??
-      currentStatus ??
-      findFirstMatch(text, [
-        /Preparing to Ship/i,
-        /Processing/i,
-        /Shipped/i,
-        /Out for Delivery/i,
-        /Delivered/i,
-        /Order Details/i,
-      ]) ??
-      "Order page available";
+    const fallbackStatus = findFirstMatch(text, [
+      /Preparing to Ship/i,
+      /Processing/i,
+      /Shipped/i,
+      /Out for Delivery/i,
+      /Delivered/i,
+    ]);
+    const fallbackLatestEvent = findFirstMatch(text, [
+      /Arrives[^.]+/i,
+      /Delivers[^.]+/i,
+      /Delivery[^.]+/i,
+      /Ships[^.]+/i,
+      /Pickup[^.]+/i,
+    ]);
+
+    const status = statusDescription ?? currentStatus ?? fallbackStatus ?? null;
     const latestEvent =
       (deliveryDate ? `도착 예정: ${deliveryDate}` : null) ??
-      findFirstMatch(text, [
-        /Arrives[^.]+/i,
-        /Delivers[^.]+/i,
-        /Delivery[^.]+/i,
-        /Ships[^.]+/i,
-        /Pickup[^.]+/i,
-      ]) ??
-      "Apple order page fetched successfully.";
+      fallbackLatestEvent ??
+      null;
+
+    if (!status && !latestEvent) {
+      logTracking("Apple tracking parse failed", {
+        reason: "No status or event extracted from Apple order page",
+      });
+      return {
+        ok: false as const,
+        snapshot: defaultProviderState(
+          APPLE_ORDER_URL,
+          "Apple order page was fetched but no usable status was extracted.",
+        ),
+      };
+    }
 
     logTracking("Apple tracking request succeeded", {
       status,
@@ -418,8 +468,8 @@ async function fetchAppleTracking() {
       ok: true as const,
       snapshot: {
         sourceUrl: APPLE_ORDER_URL,
-        status,
-        latestEvent,
+        status: status ?? "Processing",
+        latestEvent: latestEvent ?? "No tracking data available yet.",
         eventTime: null,
         isStale: false,
       },
@@ -440,7 +490,7 @@ async function fetchAppleTracking() {
   }
 }
 
-async function fetchDhlTracking() {
+async function fetchDhlTracking(dhlLanguage: string) {
   if (!DHL_API_KEY) {
     logTracking("DHL tracking skipped", {
       reason: "Missing DHL_API_KEY",
@@ -457,11 +507,12 @@ async function fetchDhlTracking() {
   try {
     const url = new URL(DHL_TRACKING_URL);
     url.searchParams.set("trackingNumber", DHL_TRACKING_NUMBER);
-    url.searchParams.set("language", process.env.DHL_TRACKING_LANGUAGE ?? "ko");
+    url.searchParams.set("language", dhlLanguage);
 
     logTracking("DHL tracking request started", {
       url: url.toString(),
       trackingNumber: DHL_TRACKING_NUMBER,
+      language: dhlLanguage,
     });
 
     const response = await fetch(url, {
@@ -527,8 +578,10 @@ async function fetchDhlTracking() {
   }
 }
 
-export async function getTrackingSnapshot() {
-  const cached = await readCache();
+export async function getTrackingSnapshot(locale: Locale = "en") {
+  const cacheKey = resolveCacheKey(locale);
+  const dhlLanguage = resolveDhlLanguage(locale);
+  const cached = await readCache(cacheKey);
 
   if (cached?.lastUpdatedAt) {
     const age = Date.now() - new Date(cached.lastUpdatedAt).getTime();
@@ -547,7 +600,7 @@ export async function getTrackingSnapshot() {
 
   const [appleResult, dhlResult] = await Promise.all([
     fetchAppleTracking(),
-    fetchDhlTracking(),
+    fetchDhlTracking(dhlLanguage),
   ]);
 
   const hadAnySuccess = appleResult.ok || dhlResult.ok;
@@ -570,7 +623,7 @@ export async function getTrackingSnapshot() {
   };
 
   if (hadAnySuccess) {
-    await writeCache(snapshot);
+    await writeCache(cacheKey, snapshot);
     logTracking("Tracking snapshot cached", {
       lastUpdatedAt: snapshot.lastUpdatedAt,
       appleOk: appleResult.ok,

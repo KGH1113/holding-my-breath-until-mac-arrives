@@ -9,7 +9,7 @@ export default async function Page() {
     acceptLanguage: requestHeaders.get("accept-language"),
     country: requestHeaders.get("x-vercel-ip-country"),
   });
-  const tracking = await getTrackingSnapshot();
+  const tracking = await getTrackingSnapshot(locale);
 
   return <HomePage locale={locale} tracking={tracking} />;
 }
