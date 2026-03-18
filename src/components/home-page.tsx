@@ -8,6 +8,7 @@ import {
   getKoreanDateLabel,
 } from "@/lib/countdown";
 import type { Locale } from "@/lib/i18n";
+import type { TrackingSnapshot } from "@/lib/tracking";
 
 const SECOND = 1_000;
 
@@ -26,6 +27,7 @@ type CopySet = {
   eyebrow: string;
   title: string;
   madeByButtonLabel: string;
+  trackingButtonLabel: string;
   profileTitle: string;
   profileLabelRole: string;
   profileLabelLocation: string;
@@ -38,6 +40,13 @@ type CopySet = {
   totalLabel: string;
   expectedDeliveryLabel: string;
   timezoneNote: string;
+  shipmentTitle: string;
+  shipmentUnavailableLabel: string;
+  shipmentStaleLabel: string;
+  shipmentLastUpdatedLabel: string;
+  shipmentLatestEventLabel: string;
+  shipmentOpenLinkLabel: string;
+  shipmentStatusLabel: string;
   timeParts: TimePart[];
   specs: readonly string[][];
   dateLabel: string;
@@ -66,6 +75,7 @@ const copyByLocale: Record<
       eyebrow: "Holding my breath",
       title: "Countdown to the new MacBook.",
       madeByButtonLabel: "Made By",
+      trackingButtonLabel: "Tracking",
       profileTitle: "About the owner",
       profileLabelRole: "Role",
       profileLabelLocation: "Location",
@@ -78,6 +88,13 @@ const copyByLocale: Record<
       totalLabel: "Total",
       expectedDeliveryLabel: "Expected delivery date",
       timezoneNote: "Timer follows Asia/Seoul time",
+      shipmentTitle: "Live shipment",
+      shipmentUnavailableLabel: "Unavailable",
+      shipmentStaleLabel: "stale",
+      shipmentLastUpdatedLabel: "Last updated",
+      shipmentLatestEventLabel: "Latest",
+      shipmentOpenLinkLabel: "Open",
+      shipmentStatusLabel: "Status",
       timeParts: [
         { key: "days", label: "Days" },
         { key: "hours", label: "Hours" },
@@ -103,6 +120,7 @@ const copyByLocale: Record<
       eyebrow: "Today is the day",
       title: "The Mac could arrive any minute now.",
       madeByButtonLabel: "Made By",
+      trackingButtonLabel: "Tracking",
       profileTitle: "About the owner",
       profileLabelRole: "Role",
       profileLabelLocation: "Location",
@@ -116,6 +134,13 @@ const copyByLocale: Record<
       expectedDeliveryLabel: "Expected delivery date",
       timezoneNote:
         "Timer follows Asia/Seoul time so the countdown behaves the same everywhere.",
+      shipmentTitle: "Live shipment",
+      shipmentUnavailableLabel: "Unavailable",
+      shipmentStaleLabel: "stale",
+      shipmentLastUpdatedLabel: "Last updated",
+      shipmentLatestEventLabel: "Latest",
+      shipmentOpenLinkLabel: "Open",
+      shipmentStatusLabel: "Status",
       timeParts: [
         { key: "days", label: "Days" },
         { key: "hours", label: "Hours" },
@@ -141,6 +166,7 @@ const copyByLocale: Record<
       eyebrow: "Mission accomplished",
       title: "The Mac has landed.",
       madeByButtonLabel: "Made By",
+      trackingButtonLabel: "Tracking",
       profileTitle: "About the owner",
       profileLabelRole: "Role",
       profileLabelLocation: "Location",
@@ -154,6 +180,13 @@ const copyByLocale: Record<
       expectedDeliveryLabel: "Expected delivery date",
       timezoneNote:
         "Timer follows Asia/Seoul time so the countdown behaves the same everywhere.",
+      shipmentTitle: "Live shipment",
+      shipmentUnavailableLabel: "Unavailable",
+      shipmentStaleLabel: "stale",
+      shipmentLastUpdatedLabel: "Last updated",
+      shipmentLatestEventLabel: "Latest",
+      shipmentOpenLinkLabel: "Open",
+      shipmentStatusLabel: "Status",
       timeParts: [
         { key: "days", label: "Days" },
         { key: "hours", label: "Hours" },
@@ -181,6 +214,7 @@ const copyByLocale: Record<
       eyebrow: "숨 참고 기다리는 중",
       title: "새 맥북 도착까지\n카운트다운",
       madeByButtonLabel: "Made By",
+      trackingButtonLabel: "Tracking",
       profileTitle: "페이지 주인",
       profileLabelRole: "역할",
       profileLabelLocation: "위치",
@@ -193,6 +227,13 @@ const copyByLocale: Record<
       totalLabel: "총액",
       expectedDeliveryLabel: "배송 예정일",
       timezoneNote: "타이머는 Asia/Seoul 기준으로 계산됨",
+      shipmentTitle: "실시간 배송 상태",
+      shipmentUnavailableLabel: "확인 불가",
+      shipmentStaleLabel: "이전 정보",
+      shipmentLastUpdatedLabel: "마지막 업데이트",
+      shipmentLatestEventLabel: "최근 정보",
+      shipmentOpenLinkLabel: "열기",
+      shipmentStatusLabel: "상태",
       timeParts: [
         { key: "days", label: "일" },
         { key: "hours", label: "시간" },
@@ -218,6 +259,7 @@ const copyByLocale: Record<
       eyebrow: "오늘이 그날",
       title: "맥이 이제 정말 곧 도착할 수 있다.",
       madeByButtonLabel: "Made By",
+      trackingButtonLabel: "Tracking",
       profileTitle: "페이지 주인",
       profileLabelRole: "역할",
       profileLabelLocation: "위치",
@@ -231,6 +273,13 @@ const copyByLocale: Record<
       expectedDeliveryLabel: "배송 예정일",
       timezoneNote:
         "타이머는 Asia/Seoul 기준으로 계산되어 어디서 봐도 같은 상태를 보여준다.",
+      shipmentTitle: "실시간 배송 상태",
+      shipmentUnavailableLabel: "확인 불가",
+      shipmentStaleLabel: "이전 정보",
+      shipmentLastUpdatedLabel: "마지막 업데이트",
+      shipmentLatestEventLabel: "최근 정보",
+      shipmentOpenLinkLabel: "열기",
+      shipmentStatusLabel: "상태",
       timeParts: [
         { key: "days", label: "일" },
         { key: "hours", label: "시간" },
@@ -256,6 +305,7 @@ const copyByLocale: Record<
       eyebrow: "임무 완료",
       title: "맥이 도착했다.",
       madeByButtonLabel: "Made By",
+      trackingButtonLabel: "Tracking",
       profileTitle: "페이지 주인",
       profileLabelRole: "역할",
       profileLabelLocation: "위치",
@@ -269,6 +319,13 @@ const copyByLocale: Record<
       expectedDeliveryLabel: "배송 예정일",
       timezoneNote:
         "타이머는 Asia/Seoul 기준으로 계산되어 어디서 봐도 같은 상태를 보여준다.",
+      shipmentTitle: "실시간 배송 상태",
+      shipmentUnavailableLabel: "확인 불가",
+      shipmentStaleLabel: "이전 정보",
+      shipmentLastUpdatedLabel: "마지막 업데이트",
+      shipmentLatestEventLabel: "최근 정보",
+      shipmentOpenLinkLabel: "열기",
+      shipmentStatusLabel: "상태",
       timeParts: [
         { key: "days", label: "일" },
         { key: "hours", label: "시간" },
@@ -299,12 +356,25 @@ function getStatusCopy(locale: Locale, status: CountdownStatus) {
 
 type HomePageProps = {
   locale: Locale;
+  tracking: TrackingSnapshot;
 };
 
-export function HomePage({ locale }: HomePageProps) {
+function formatUpdatedAt(timestamp: string | null, locale: Locale) {
+  if (!timestamp) {
+    return null;
+  }
+
+  return new Intl.DateTimeFormat(locale === "ko" ? "ko-KR" : "en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(timestamp));
+}
+
+export function HomePage({ locale, tracking }: HomePageProps) {
   const [nowTimestamp, setNowTimestamp] = useState<number | null>(null);
   const [activeLocale, setActiveLocale] = useState<Locale>(locale);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isTrackingModalOpen, setIsTrackingModalOpen] = useState(false);
 
   useEffect(() => {
     setNowTimestamp(Date.now());
@@ -323,13 +393,14 @@ export function HomePage({ locale }: HomePageProps) {
   }, [locale]);
 
   useEffect(() => {
-    if (!isProfileModalOpen) {
+    if (!isProfileModalOpen && !isTrackingModalOpen) {
       return;
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setIsProfileModalOpen(false);
+        setIsTrackingModalOpen(false);
       }
     };
 
@@ -338,7 +409,7 @@ export function HomePage({ locale }: HomePageProps) {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isProfileModalOpen]);
+  }, [isProfileModalOpen, isTrackingModalOpen]);
 
   const snapshot =
     nowTimestamp === null
@@ -351,27 +422,34 @@ export function HomePage({ locale }: HomePageProps) {
         }
       : getCountdownSnapshot(nowTimestamp, deliveryTarget);
   const copy = getStatusCopy(activeLocale, snapshot.status);
+  const lastUpdatedAt = formatUpdatedAt(tracking.lastUpdatedAt, activeLocale);
 
   return (
     <>
       <main className="flex min-h-dvh items-center justify-center bg-black px-0 md:px-4">
-        <section className="grid h-auto w-full overflow-hidden border-y border-white/12 bg-[linear-gradient(180deg,rgba(8,8,10,0.98),rgba(2,2,4,0.98))] shadow-[0_32px_80px_rgba(0,0,0,0.48)] md:h-[min(920px,calc(100dvh-32px))] md:w-[min(1180px,100%)] md:grid-rows-[minmax(220px,0.84fr)_minmax(0,1fr)] md:rounded-[32px] md:border">
+        <section className="flex h-auto w-full flex-col overflow-hidden border-y border-white/12 bg-[linear-gradient(180deg,rgba(8,8,10,0.98),rgba(2,2,4,0.98))] shadow-[0_32px_80px_rgba(0,0,0,0.48)] md:h-[min(920px,calc(100dvh-32px))] md:w-[min(1180px,100%)] md:rounded-[32px] md:border">
           <div
             aria-hidden="true"
-            className='relative min-h-[220px] bg-[#050505] bg-[image:linear-gradient(180deg,rgba(0,0,0,0.06),rgba(0,0,0,0.72)),url("https://www.apple.com/v/macbook-pro/aw/images/overview/welcome/hero_endframe__fwev9ebh42mq_large_2x.jpg")] bg-cover bg-[center_34%] bg-no-repeat md:bg-[center_28%]'
+            className='relative min-h-[220px] bg-[#050505] bg-[image:linear-gradient(180deg,rgba(0,0,0,0.06),rgba(0,0,0,0.72)),url("/macbook-hero.png")] bg-cover bg-center bg-no-repeat md:min-h-0 md:flex-1'
           >
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_24%_18%,rgba(255,255,255,0.16),transparent_18%),radial-gradient(circle_at_72%_70%,rgba(125,211,252,0.12),transparent_24%)]" />
             <div className="absolute inset-x-0 bottom-0 h-2/5 bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.92))]" />
           </div>
 
-          <div className="grid min-h-0 grid-cols-1 gap-5 p-4 md:grid-cols-[minmax(0,1.18fr)_minmax(300px,0.82fr)] md:p-7">
-            <div className="contents md:flex md:min-h-0 md:flex-col md:justify-between md:gap-[18px]">
+          <div className="flex min-h-0 flex-col gap-5 p-4 md:h-[500px] md:flex-none md:flex-row md:p-7">
+            <div className="contents md:flex md:min-h-0 md:flex-[1.18] md:flex-col md:justify-between md:gap-[18px]">
               <div className="order-1 flex min-h-[140px] flex-col gap-3 md:min-h-[156px]">
                 <div className="flex items-center justify-between gap-4">
                   <p className="m-0 text-[0.84rem] font-bold uppercase tracking-[0.14em] text-white/68">
                     {copy.eyebrow}
                   </p>
                   <div className="flex items-center gap-2">
+                    <button
+                      className="min-w-[78px] whitespace-nowrap rounded-full border border-white/12 bg-white/3 px-3 py-1.5 text-[0.7rem] font-bold uppercase tracking-[0.14em] text-white/62 transition hover:text-white"
+                      onClick={() => setIsTrackingModalOpen(true)}
+                      type="button"
+                    >
+                      {copy.trackingButtonLabel}
+                    </button>
                     <button
                       className="min-w-[78px] whitespace-nowrap rounded-full border border-white/12 bg-white/3 px-3 py-1.5 text-[0.7rem] font-bold uppercase tracking-[0.14em] text-white/62 transition hover:text-white"
                       onClick={() => setIsProfileModalOpen(true)}
@@ -454,7 +532,7 @@ export function HomePage({ locale }: HomePageProps) {
               </section>
             </div>
 
-            <div className="order-2 flex min-h-0 flex-col gap-3.5 rounded-3xl border border-white/12 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),transparent_32%),linear-gradient(180deg,rgba(18,18,22,0.96),rgba(10,10,12,0.92))] p-4 backdrop-blur-[12px] md:p-[22px]">
+            <div className="order-2 flex min-h-0 flex-col gap-3.5 rounded-3xl border border-white/12 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),transparent_32%),linear-gradient(180deg,rgba(18,18,22,0.96),rgba(10,10,12,0.92))] p-4 backdrop-blur-[12px] md:w-[min(300px,41%)] md:flex-[0.82] md:p-[22px]">
               <div className="flex flex-col gap-1.5 text-[0.82rem] uppercase tracking-[0.1em] text-white/68">
                 <p className="m-0">{copy.expectedDeliveryLabel}</p>
               </div>
@@ -555,6 +633,94 @@ export function HomePage({ locale }: HomePageProps) {
                   {copy.profileEmailPlaceholder}
                 </a>
               </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isTrackingModalOpen ? (
+        <div
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/72 p-4 backdrop-blur-sm"
+          role="dialog"
+        >
+          <button
+            aria-label={copy.closeLabel}
+            className="absolute inset-0 cursor-default"
+            onClick={() => setIsTrackingModalOpen(false)}
+            type="button"
+          />
+          <div className="relative z-10 w-full max-w-lg rounded-[28px] border border-white/12 bg-[linear-gradient(180deg,rgba(18,18,22,0.98),rgba(8,8,10,0.98))] p-5 shadow-[0_32px_80px_rgba(0,0,0,0.48)] md:p-6">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <p className="m-0 text-[0.78rem] font-bold uppercase tracking-[0.12em] text-white/56">
+                  {copy.shipmentTitle}
+                </p>
+                {lastUpdatedAt ? (
+                  <p className="mt-2 text-[0.85rem] leading-[1.4] text-white/52">
+                    {copy.shipmentLastUpdatedLabel} {lastUpdatedAt}
+                  </p>
+                ) : null}
+              </div>
+              <button
+                aria-label={copy.closeLabel}
+                className="rounded-full border border-white/12 bg-white/4 px-3 py-1.5 text-[0.7rem] font-bold uppercase tracking-[0.14em] text-white/68 transition hover:text-white"
+                onClick={() => setIsTrackingModalOpen(false)}
+                type="button"
+              >
+                {copy.closeLabel}
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              {(
+                [
+                  { label: "Apple", data: tracking.apple },
+                  { label: "DHL", data: tracking.dhl },
+                ] as const
+              ).map(({ label, data }) => (
+                <section
+                  className="rounded-3xl border border-white/10 bg-white/[0.02] p-4"
+                  key={label}
+                >
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <p className="m-0 text-[0.8rem] font-bold uppercase tracking-[0.12em] text-white/58">
+                        {label}
+                      </p>
+                      {data.isStale ? (
+                        <span className="rounded-full border border-white/10 px-1.5 py-0.5 text-[0.65rem] uppercase tracking-[0.12em] text-white/45">
+                          {copy.shipmentStaleLabel}
+                        </span>
+                      ) : null}
+                    </div>
+                    <a
+                      className="shrink-0 text-[0.76rem] font-medium text-white/68 underline decoration-white/15 underline-offset-4 transition hover:decoration-white/50"
+                      href={data.sourceUrl}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      {copy.shipmentOpenLinkLabel}
+                    </a>
+                  </div>
+                  <div className="flex flex-col gap-2 text-[0.92rem] leading-[1.5] text-white/82">
+                    <p className="m-0">
+                      <span className="mr-2 text-[0.73rem] font-bold uppercase tracking-[0.12em] text-white/46">
+                        {copy.shipmentStatusLabel}
+                      </span>
+                      <span>
+                        {data.status || copy.shipmentUnavailableLabel}
+                      </span>
+                    </p>
+                    <p className="m-0">
+                      <span className="mr-2 text-[0.73rem] font-bold uppercase tracking-[0.12em] text-white/46">
+                        {copy.shipmentLatestEventLabel}
+                      </span>
+                      <span>{data.latestEvent}</span>
+                    </p>
+                  </div>
+                </section>
+              ))}
             </div>
           </div>
         </div>

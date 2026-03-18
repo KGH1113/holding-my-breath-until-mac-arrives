@@ -8,6 +8,7 @@ The app shows:
 - a localized interface in English or Korean
 - the target delivery date interpreted in `Asia/Seoul`
 - a summary of the ordered machine configuration and total price
+- a live shipment section for Apple order status and DHL tracking
 
 ## Stack
 
@@ -44,6 +45,26 @@ The detection logic lives in `src/lib/i18n.ts`.
 
 Even though the initial locale is chosen from headers, the UI also exposes an `ENG / KOR` toggle so the viewer can switch languages manually on the page.
 
+### Shipment tracking
+
+The countdown card includes a server-fetched shipment summary for:
+
+- Apple order status
+- DHL tracking
+
+Tracking data is normalized in `src/lib/tracking.ts` and cached for 5 minutes in `.cache/tracking-cache.json`.
+
+Behavior:
+
+- if a provider fetch succeeds, the latest snapshot is cached
+- if a later fetch fails, the page reuses the last successful provider snapshot and marks it as stale
+- if no cached value exists, that provider falls back to an unavailable state
+
+Current limitations:
+
+- Apple requires an authenticated guest-order cookie. Anonymous server requests currently return `403 Forbidden`.
+- DHL now uses the official Shipment Tracking API and requires a valid `DHL_API_KEY`.
+
 ## Project structure
 
 ```text
@@ -57,6 +78,7 @@ src/
   lib/
     countdown.ts      Countdown math and delivery state calculation
     i18n.ts           Locale detection helpers
+    tracking.ts       Apple + DHL tracking fetch, normalization, and cache
 ```
 
 ## Development
@@ -116,6 +138,50 @@ That includes:
 - total label
 - countdown unit labels
 - timezone note
+- shipment labels
+
+### Configure tracking
+
+The tracking layer reads these environment variables:
+
+- `APPLE_ORDER_URL`
+  Default: the hardcoded Apple guest order URL currently used by the page
+- `APPLE_ORDER_COOKIE`
+  Required for Apple tracking to work on the server
+- `APPLE_ORDER_USER_AGENT`
+  Optional override for the Apple request user agent
+- `DHL_TRACKING_URL`
+  Default: `https://api-eu.dhl.com/track/shipments`
+- `DHL_TRACKING_NUMBER`
+  Default: `7197708221`
+- `DHL_TRACKING_PAGE_URL`
+  Optional public DHL tracking page used as the source link in the UI
+- `DHL_API_KEY`
+  Required for DHL tracking via the official Shipment Tracking API
+- `DHL_TRACKING_LANGUAGE`
+  Optional API response language, defaults to `ko`
+- `DHL_UTAPI_COOKIE`
+  Optional browser cookie string for the public DHL web fallback endpoint when the official API is unavailable
+
+Example:
+
+```bash
+APPLE_ORDER_COOKIE='session-cookie-here'
+APPLE_ORDER_URL='https://secure9.store.apple.com/...'
+DHL_TRACKING_URL='https://api-eu.dhl.com/track/shipments'
+DHL_TRACKING_PAGE_URL='https://www.dhl.com/kr-ko/home/tracking.html?submit=1&tracking-id=7197708221'
+DHL_TRACKING_NUMBER='7197708221'
+DHL_API_KEY='your-dhl-subscription-key'
+DHL_TRACKING_LANGUAGE='ko'
+DHL_UTAPI_COOKIE='ak_bmsc=...; _abck=...; bm_sz=...'
+```
+
+Notes:
+
+- `APPLE_ORDER_COOKIE` is intentionally not committed and must be supplied manually.
+- `DHL_API_KEY` must be issued from the DHL Developer Portal for the `Shipment Tracking - Unified` API.
+- `DHL_UTAPI_COOKIE` is only a best-effort fallback for DHL's protected public web endpoint and may expire quickly or stop working without warning.
+- The cache file is local to the running server process and filesystem. On ephemeral hosting, stale retention may reset between deploys or instance restarts.
 
 ## Verification
 
@@ -136,3 +202,4 @@ npm run build
 - The page is server-rendered on demand because locale detection depends on request headers.
 - The UI is implemented with Tailwind utility classes only.
 - Pretendard is loaded globally from CDN in the root layout.
+- Shipment tracking is fetched server-side and rendered as a snapshot while the countdown itself continues ticking client-side.
